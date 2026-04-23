@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36705.20 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MT3_master", "MT3_master.vcxproj", "{700B80DD-40A6-4C7B-99C5-5EF571C3A4C2}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Develop|x64 = Develop|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{700B80DD-40A6-4C7B-99C5-5EF571C3A4C2}.Debug|x64.ActiveCfg = Debug|x64
+		{700B80DD-40A6-4C7B-99C5-5EF571C3A4C2}.Debug|x64.Build.0 = Debug|x64
+		{700B80DD-40A6-4C7B-99C5-5EF571C3A4C2}.Develop|x64.ActiveCfg = Develop|x64
+		{700B80DD-40A6-4C7B-99C5-5EF571C3A4C2}.Develop|x64.Build.0 = Develop|x64
+		{700B80DD-40A6-4C7B-99C5-5EF571C3A4C2}.Release|x64.ActiveCfg = Release|x64
+		{700B80DD-40A6-4C7B-99C5-5EF571C3A4C2}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {B14A8A59-8C5C-4988-9706-7D6E988E4AA9}
+	EndGlobalSection
+EndGlobal
