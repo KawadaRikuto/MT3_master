@@ -231,6 +231,24 @@ void MatrixScreenPrintf(int x, int y, const Matrix4x4& matrix, const char* label
 	}
 }
 
+Matrix4x4 MakeAffineMatrix(const Vector3& scale, const Vector3& rotate, const Vector3& translate) {
+	
+	Matrix4x4 scaleMatrix = MakeScaleMatrix(scale);
+
+	Matrix4x4 rotateXMatrix = MakeRotationXMatrix(rotate.x);
+	Matrix4x4 rotateYMatrix = MakeRotationYMatrix(rotate.y);
+	Matrix4x4 rotateZMatrix = MakeRotationZMatrix(rotate.z);
+
+	
+	Matrix4x4 rotateMatrix = Multiply(rotateXMatrix, Multiply(rotateYMatrix, rotateZMatrix));
+
+	Matrix4x4 translationMatrix = MakeTranslationMatrix(translate);
+
+	Matrix4x4 result = Multiply(scaleMatrix, Multiply(rotateMatrix, translationMatrix));
+
+	return result;
+}
+
 const char kWindowTitle[] = "LE2B_07_カワダ_リクト";
 
 // Windowsアプリでのエントリーポイント(main関数)
@@ -247,7 +265,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Vector3 v2{ 4.0f, -1.0f, 2.0f };
 	float k = 4.0f;*/
 
-	Matrix4x4 m1 = { { 3.2f, 0.7f, 9.6f, 4.4f,
+	/*Matrix4x4 m1 = { { 3.2f, 0.7f, 9.6f, 4.4f,
 					 5.5f, 1.3f, 7.8f, 2.1f,
 					 6.9f, 8.0f, 2.6f, 1.0f,
 					 0.5f, 7.2f, 5.1f, 3.3f } };
@@ -267,7 +285,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 									2.0f, 2.0f, 1.0f, 3.0f }};
 	
 
+	Vector3 rotate{ 0.4f, 1.43f, -0.8f };*/
+
+
+	Vector3 scale{ 1.2f, 0.79f, -2.1f };
 	Vector3 rotate{ 0.4f, 1.43f, -0.8f };
+	Vector3 translate{ 2.7f, -4.15f, 1.57f };
 	
 
 	// ウィンドウの×ボタンが押されるまでループ
@@ -292,7 +315,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		Vector3 resultNormalize = Normalize(v2);*/
 
 
-		Matrix4x4 resultAdd = Add(m1, m2);
+		/*Matrix4x4 resultAdd = Add(m1, m2);
 		Matrix4x4 resultMultiply = Multiply(m1, m2);
 		Matrix4x4 resultSubtract = Subtract(m1, m2);
 		Matrix4x4 inverseM1 = Inverse(m1);
@@ -310,8 +333,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		Matrix4x4 rotationXMatrix = MakeRotationXMatrix(rotate.x);
 		Matrix4x4 rotationYMatrix = MakeRotationYMatrix(rotate.y);
 		Matrix4x4 rotationZMatrix = MakeRotationZMatrix(rotate.z);
-		Matrix4x4 rotateXYZMatrix = Multiply(rotationXMatrix, Multiply(rotationYMatrix, rotationZMatrix));
+		Matrix4x4 rotateXYZMatrix = Multiply(rotationXMatrix, Multiply(rotationYMatrix, rotationZMatrix));*/
 
+
+		Matrix4x4 worldMatrix = MakeAffineMatrix(scale, rotate, translate);
 
 		///
 		/// ↑更新処理ここまで
@@ -344,10 +369,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		MatrixScreenPrintf(0, kRowHeight * 5, scaleMatrix, "scaleMatrix");*/
 		
 
-		MatrixScreenPrintf(0, 0, rotationXMatrix, "rotationXMatrix");
+		/*MatrixScreenPrintf(0, 0, rotationXMatrix, "rotationXMatrix");
 		MatrixScreenPrintf(0, kRowHeight * 5, rotationYMatrix, "rotationYMatrix");
 		MatrixScreenPrintf(0, kRowHeight * 5 * 2, rotationZMatrix, "rotationZMatrix");
-		MatrixScreenPrintf(0, kRowHeight * 5 * 3, rotateXYZMatrix, "rotateXYZMatrix");
+		MatrixScreenPrintf(0, kRowHeight * 5 * 3, rotateXYZMatrix, "rotateXYZMatrix");*/
+
+		MatrixScreenPrintf(0, 0, worldMatrix, "worldMatrix");
 
 		///
 		/// ↑描画処理ここまで
