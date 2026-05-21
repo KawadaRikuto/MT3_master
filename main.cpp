@@ -19,39 +19,50 @@ struct Sphere {
 	float radius;
 };
 
-//// 加算
-//Vector3 Add(const Vector3& v1, const Vector3& v2) {
-//	return { v1.x + v2.x, v1.y + v2.y, v1.z + v2.z };
-//}
-//
-//// 減算
-//Vector3 Subtract(const Vector3& v1, const Vector3& v2) {
-//	return { v1.x - v2.x, v1.y - v2.y, v1.z - v2.z };
-//}
-//
-//// スカラー倍
-//Vector3 Multiply(float scalar, const Vector3& v) {
-//	return { scalar * v.x, scalar * v.y, scalar * v.z };
-//}
-//
-//// 内積
-//float Dot(const Vector3& v1, const Vector3& v2) {
-//	return (v1.x * v2.x) + (v1.y * v2.y) + (v1.z * v2.z);
-//}
-//
-//// 長さ
-//float Length(const Vector3& v) {
-//	return sqrtf(Dot(v, v));
-//}
-//
-//// 正規化
-//Vector3 Normalize(const Vector3& v) {
-//	float len = Length(v);
-//	if (len != 0) {
-//		return { v.x / len, v.y / len, v.z / len };
-//	}
-//	return { 0, 0, 0 };
-//}
+struct Segment {
+	Vector3 origin;
+	Vector3 diff;
+};
+
+// 加算
+Vector3 Add(const Vector3& v1, const Vector3& v2) {
+	return { v1.x + v2.x, v1.y + v2.y, v1.z + v2.z };
+}
+
+// 減算
+Vector3 Subtract(const Vector3& v1, const Vector3& v2) {
+	return { v1.x - v2.x, v1.y - v2.y, v1.z - v2.z };
+}
+
+// スカラー倍
+Vector3 Multiply(float scalar, const Vector3& v) {
+	return { scalar * v.x, scalar * v.y, scalar * v.z };
+}
+
+// 内積
+float Dot(const Vector3& v1, const Vector3& v2) {
+	return (v1.x * v2.x) + (v1.y * v2.y) + (v1.z * v2.z);
+}
+
+// 長さ
+float Length(const Vector3& v) {
+	return sqrtf(Dot(v, v));
+}
+
+float LengthSquared(const Vector3& v) {
+	return Dot(v, v);
+}
+
+
+
+// 正規化
+Vector3 Normalize(const Vector3& v) {
+	float len = Length(v);
+	if (len != 0) {
+		return { v.x / len, v.y / len, v.z / len };
+	}
+	return { 0, 0, 0 };
+}
 
 // 行列の加法
 Matrix4x4 Add(const Matrix4x4& m1, const Matrix4x4& m2) {
@@ -370,6 +381,31 @@ void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectionMatrix, con
 	}
 }
 
+// 正射影ベクトルを計算する関数
+Vector3 Project(const Vector3& v1, const Vector3& v2) {
+	Vector3 v2Norm = Normalize(v2);
+	float dot = Dot(v1, v2Norm);
+	return Multiply(dot, v2Norm);
+}
+
+// 線分上の最近接点を計算する関数
+Vector3 ClosestPoint(const Vector3& point, const Segment& segment) {
+	Vector3 v = Subtract(point, segment.origin);
+	float lenSq = LengthSquared(segment.diff); // diffの長さの2乗
+
+	if (lenSq < 1e-6f) return segment.origin; // 微小な線分対策
+
+	// 射影係数 t を計算し、線分の範囲（0.0 〜 1.0）に収める
+	float t = Dot(v, segment.diff) / lenSq;
+	if (t < 0.0f) {
+		t = 0.0f;
+	} else if (t > 1.0f) {
+		t = 1.0f;
+	}
+
+	// 始点に、クランプされた差分ベクトルを足して最近接点とする
+	return Add(segment.origin, Multiply(t, segment.diff));
+}
 
 const char kWindowTitle[] = "LE2B_07_カワダ_リクト";
 
@@ -437,9 +473,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//Vector3 v1_cross{ 1.2f, -3.9f, 2.5f };
 	//Vector3 v2_cross{ 2.8f, 0.4f, -1.3f };
 
+	/*Vector3 cameraTranslate{ 0.0f, 1.9f, -6.49f };
+	Vector3 cameraRotate{ 0.26f, 0.0f, 0.0f };
+	Sphere sphere = { {0,0,0}, 1.0f };*/
+
+	Segment segment{ {-2.0f, -1.0f, 0.0f}, {3.0f, 2.0f, 2.0f} };
+	Vector3 point{ -1.5f, 0.6f, 0.6f };
+
+	// 実装イメージの画面に合わせるためのカメラアングル
 	Vector3 cameraTranslate{ 0.0f, 1.9f, -6.49f };
 	Vector3 cameraRotate{ 0.26f, 0.0f, 0.0f };
-	Sphere sphere = { {0,0,0}, 1.0f };
 
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
@@ -516,9 +559,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 #ifdef USE_IMGUI
 
 		ImGui::Begin("window");
-		ImGui::DragFloat3("CameraTranslate", &cameraTranslate.x, 0.01f);
+		/*ImGui::DragFloat3("CameraTranslate", &cameraTranslate.x, 0.01f);
 		ImGui::DragFloat3("CameraRotate", &cameraRotate.x, 0.01f);
-		ImGui::DragFloat3("SphereRadius", &sphere.radius, 0.01f);
+		ImGui::DragFloat3("SphereRadius", &sphere.radius, 0.01f);*/
+		
+		ImGui::DragFloat3("Point", &point.x, 0.01f);
+		ImGui::DragFloat3("Segment Origin", &segment.origin.x, 0.01f);
+		ImGui::DragFloat3("Segment Diff", &segment.diff.x, 0.01f);
+		
 		ImGui::End();
 
 #endif
@@ -533,6 +581,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		Matrix4x4 viewProjectionMatrix = Multiply(viewMatrix, projectionMatrix);
 		// 5. ビューポート行列
 		Matrix4x4 viewportMatrix = MakeViewportMatrix(0, 0, 1280.0f, 720.0f, 0.0f, 1.0f);
+
+		Vector3 project = Project(Subtract(point, segment.origin), segment.diff);
+		Vector3 closestPoint = ClosestPoint(point, segment);
+
 
 		///
 		/// ↑更新処理ここまで
@@ -591,8 +643,26 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// グリッドを描画
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
-		// 球体を描画
-		DrawSphere(sphere, viewProjectionMatrix, viewportMatrix, WHITE);
+		//// 球体を描画
+		//DrawSphere(sphere, viewProjectionMatrix, viewportMatrix, WHITE);
+
+		
+		Vector3 start = Transform(Transform(segment.origin, viewProjectionMatrix), viewportMatrix);
+		Vector3 end = Transform(Transform(Add(segment.origin, segment.diff), viewProjectionMatrix), viewportMatrix);
+		Novice::DrawLine((int)start.x, (int)start.y, (int)end.x, (int)end.y, WHITE);
+
+		
+		Sphere pointSphere{ point, 0.01f };
+		Sphere closestPointSphere{ closestPoint, 0.01f };
+
+		
+		DrawSphere(pointSphere, viewProjectionMatrix, viewportMatrix, RED);
+		DrawSphere(closestPointSphere, viewProjectionMatrix, viewportMatrix, BLACK);
+
+		
+		ImGui::Begin("Result");
+		ImGui::InputFloat3("Project", &project.x, "%.3f", ImGuiInputTextFlags_ReadOnly);
+		ImGui::End();
 
 		///
 		/// ↑描画処理ここまで
