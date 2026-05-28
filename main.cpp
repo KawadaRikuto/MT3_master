@@ -19,9 +19,10 @@ struct Sphere {
 	float radius;
 };
 
+// 【スライド2枚目】線分（Segment）構造体の定義
 struct Segment {
-	Vector3 origin;
-	Vector3 diff;
+	Vector3 origin; //!< 始点
+	Vector3 diff;   //!< 終点への差分ベクトル
 };
 
 struct Plane {
@@ -234,7 +235,7 @@ Matrix4x4 MakeViewportMatrix(float left, float top, float width, float height, f
 	return result;
 }
 
-// 【スライド3枚目】法線と垂直なベクトルを1つ適当に求める関数
+// 法線と垂直なベクトルを1つ適当に求める関数
 Vector3 Perpendicular(const Vector3& vector) {
 	if (vector.x != 0.0f || vector.y != 0.0f) {
 		return { -vector.y, vector.x, 0.0f };
@@ -242,24 +243,23 @@ Vector3 Perpendicular(const Vector3& vector) {
 	return { 0.0f, -vector.z, vector.y };
 }
 
-// 【スライド4枚目】平面の描画関数
+// 平面の描画関数
 void DrawPlane(const Plane& plane, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
-	Vector3 center = Multiply(plane.distance, plane.normal); // 1. 中心点を決める
+	Vector3 center = Multiply(plane.distance, plane.normal);
 	Vector3 perpendiculars[4];
 
-	perpendiculars[0] = Normalize(Perpendicular(plane.normal)); // 2. 法線と垂直なベクトルを1つ求める
-	perpendiculars[1] = { -perpendiculars[0].x, -perpendiculars[0].y, -perpendiculars[0].z }; // 3. 2の逆ベクトル
-	perpendiculars[2] = Cross(plane.normal, perpendiculars[0]); // 4. 2と法線とのクロス積
-	perpendiculars[3] = { -perpendiculars[2].x, -perpendiculars[2].y, -perpendiculars[2].z }; // 5. 4の逆ベクトル
+	perpendiculars[0] = Normalize(Perpendicular(plane.normal));
+	perpendiculars[1] = { -perpendiculars[0].x, -perpendiculars[0].y, -perpendiculars[0].z };
+	perpendiculars[2] = Cross(plane.normal, perpendiculars[0]);
+	perpendiculars[3] = { -perpendiculars[2].x, -perpendiculars[2].y, -perpendiculars[2].z };
 
 	Vector3 points[4];
 	for (int32_t index = 0; index < 4; ++index) {
-		Vector3 extend = Multiply(2.0f, perpendiculars[index]); // スライド疑似コードの拡大率「2.0f」
+		Vector3 extend = Multiply(2.0f, perpendiculars[index]);
 		Vector3 point = Add(center, extend);
 		points[index] = Transform(Transform(point, viewProjectionMatrix), viewportMatrix);
 	}
 
-	// 4頂点を結んで矩形を描画する
 	Novice::DrawLine((int)points[0].x, (int)points[0].y, (int)points[2].x, (int)points[2].y, color);
 	Novice::DrawLine((int)points[2].x, (int)points[2].y, (int)points[1].x, (int)points[1].y, color);
 	Novice::DrawLine((int)points[1].x, (int)points[1].y, (int)points[3].x, (int)points[3].y, color);
@@ -293,45 +293,38 @@ void DrawGrid(const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMa
 	}
 }
 
-// 球体描画
-void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
-	const uint32_t kSubdivision = 16;
-	const float kLonEvery = float(M_PI) / kSubdivision;
-	const float kLatEvery = (float(M_PI) * 2.0f) / kSubdivision;
+// 【新規実装】線分の描画関数
+void DrawSegment(const Segment& segment, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
+	Vector3 start = segment.origin;
+	Vector3 end = Add(segment.origin, segment.diff); // 始点 + 差分 = 終点
 
-	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex) {
-		float lat = -float(M_PI) / 2.0f + kLatEvery * latIndex;
+	Vector3 screenStart = Transform(Transform(start, viewProjectionMatrix), viewportMatrix);
+	Vector3 screenEnd = Transform(Transform(end, viewProjectionMatrix), viewportMatrix);
 
-		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
-			float lon = lonIndex * kLonEvery;
-
-			auto GetPoint = [&](float lat, float lon) {
-				Vector3 p;
-				p.x = sphere.radius * std::cos(lat) * std::cos(lon) + sphere.center.x;
-				p.y = sphere.radius * std::sin(lat) + sphere.center.y;
-				p.z = sphere.radius * std::cos(lat) * std::sin(lon) + sphere.center.z;
-				return p;
-				};
-
-			Vector3 a = GetPoint(lat, lon);
-			Vector3 b = GetPoint(lat, lon + kLonEvery);
-			Vector3 c = GetPoint(lat + kLatEvery, lon);
-
-			Vector3 screenA = Transform(Transform(a, viewProjectionMatrix), viewportMatrix);
-			Vector3 screenB = Transform(Transform(b, viewProjectionMatrix), viewportMatrix);
-			Vector3 screenC = Transform(Transform(c, viewProjectionMatrix), viewportMatrix);
-
-			Novice::DrawLine((int)screenA.x, (int)screenA.y, (int)screenB.x, (int)screenB.y, color);
-			Novice::DrawLine((int)screenA.x, (int)screenA.y, (int)screenC.x, (int)screenC.y, color);
-		}
-	}
+	Novice::DrawLine((int)screenStart.x, (int)screenStart.y, (int)screenEnd.x, (int)screenEnd.y, color);
 }
 
-// 【スライド2枚目】球と平面の衝突判定関数
-bool IsCollision(const Sphere& sphere, const Plane& plane) {
-	// 平面方程式 ax + by + cz = d を用いた距離の計算
-	float distance = Dot(plane.normal, sphere.center) - plane.distance;
-	return std::abs(distance) <= sphere.radius;
+// 【スライド1・2枚目要件】線分と平面の衝突判定関数
+bool IsCollision(const Segment& segment, const Plane& plane) {
+	// 1. まず垂直（平行）判定を行うために、法線と線の方向ベクトルの内積を求める
+	float dot = Dot(plane.normal, segment.diff);
+
+	// 2. 垂直＝平行（面と線が交わらない、または完全に含まれる）
+	// 誤差を考慮して 0.0f 付近の極小値で判定します
+	if (std::abs(dot) < 1e-6f) {
+		return false;
+	}
+
+	// 3. t を求める数式
+	float t = (plane.distance - Dot(segment.origin, plane.normal)) / dot;
+
+	// 4. t の値によって、今回の「線分(Segment)」が平面と衝突しているかを判断する
+	// 直線(Line)なら常にtrue、半直線(Ray)なら t >= 0.0f、線分(Segment)なら 0.0f <= t <= 1.0f
+	if (t >= 0.0f && t <= 1.0f) {
+		return true;
+	}
+
+	return false;
 }
 
 const char kWindowTitle[] = "LE2B_07_カワダ_リクト";
@@ -346,11 +339,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
 
-	// 課題要件：球の定義（初期位置と半径）
-	Sphere sphere = { {0.0f, 1.0f, 0.0f}, 0.5f };
+	// 【変更】球体を廃止し、スライド2・3枚目の通り線分（Segment）を定義
+	Segment segment = {
+		{ 0.0f, 1.0f, 0.0f }, // origin
+		{ 1.0f, -1.0f, 0.0f } // diff
+	};
 
-	// 課題要件：平面の定義（法線と原点からの距離）
-	Plane plane = { {0.0f, 1.0f, 0.0f}, 0.0f };
+	// 平面の定義（法線と原点からの距離）
+	Plane plane = { { 0.0f, 1.0f, 0.0f }, 0.0f };
 
 	// 実装イメージの画面に合わせるためのカメラアングル
 	Vector3 cameraTranslate{ 0.0f, 1.9f, -6.49f };
@@ -377,22 +373,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		if (keys[DIK_UP]) cameraRotate.x += 0.01f;
 		if (keys[DIK_DOWN]) cameraRotate.x -= 0.01f;
 
-		// ImGuiを使用したパラメータのリアルタイム変更機能
-		ImGui::Begin("Collision Controller");
-		ImGui::Text("Camera Control: W/A/S/D or UP/DOWN keys");
-		ImGui::Separator();
+		// ImGuiを使用したパラメータのリアルタイム変更機能（スライド3枚目のUI構成）
+		ImGui::Begin("Window");
 
-		// 球体のコントロール
-		ImGui::DragFloat3("Sphere Center", &sphere.center.x, 0.01f);
-		ImGui::DragFloat("Sphere Radius", &sphere.radius, 0.01f, 0.01f, 5.0f);
-		ImGui::Separator();
-
-		// 平面のコントロール（スライド2枚目の要件）
+		// 平面のコントロール
 		if (ImGui::DragFloat3("Plane.Normal", &plane.normal.x, 0.01f)) {
-			// 法線を編集したら必ずNormalizeをかける
 			plane.normal = Normalize(plane.normal);
 		}
 		ImGui::DragFloat("Plane.Distance", &plane.distance, 0.01f);
+
+		// 線分（Segment）のコントロール
+		ImGui::DragFloat3("Segment.Origin", &segment.origin.x, 0.01f);
+		ImGui::DragFloat3("Segment.Diff", &segment.diff.x, 0.01f);
 
 		ImGui::End();
 
@@ -407,8 +399,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 5. ビューポート行列
 		Matrix4x4 viewportMatrix = MakeViewportMatrix(0, 0, 1280.0f, 720.0f, 0.0f, 1.0f);
 
-		// 球と平面の衝突判定の実行
-		bool colliding = IsCollision(sphere, plane);
+		// 【変更】線分と平面の衝突判定の実行
+		bool colliding = IsCollision(segment, plane);
 
 		///
 		/// ↑更新処理ここまで
@@ -421,21 +413,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// グリッドを描画
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
-		// 平面の描画 (スライド4枚目のアルゴリズムで矩形を描画、色はグリッドと分けて緑系にしています)
+		// 平面の描画
 		DrawPlane(plane, viewProjectionMatrix, viewportMatrix, 0x00FF00FF);
 
-		// 球体の描画 (衝突時は赤色、非衝突時は白色)
-		uint32_t sphereColor = colliding ? RED : WHITE;
-		DrawSphere(sphere, viewProjectionMatrix, viewportMatrix, sphereColor);
-
-		// 判定結果を画面にも表示
-		ImGui::Begin("Result");
-		if (colliding) {
-			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "COLLISION!");
-		} else {
-			ImGui::Text("No Collision");
-		}
-		ImGui::End();
+		// 【変更】線分の描画 (スライド2枚目要件: 衝突時は赤色 RED:0xFF0000FF、非衝突時は白色 WHITE:0xFFFFFFFF)
+		uint32_t segmentColor = colliding ? RED : WHITE;
+		DrawSegment(segment, viewProjectionMatrix, viewportMatrix, segmentColor);
 
 		///
 		/// ↑描画処理ここまで
