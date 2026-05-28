@@ -19,7 +19,6 @@ struct Sphere {
 	float radius;
 };
 
-// 【スライド2枚目】線分（Segment）構造体の定義
 struct Segment {
 	Vector3 origin; //!< 始点
 	Vector3 diff;   //!< 終点への差分ベクトル
@@ -28,6 +27,11 @@ struct Segment {
 struct Plane {
 	Vector3 normal;
 	float distance;
+};
+
+// 三角形構造体の定義
+struct Triangle {
+	Vector3 vertices[3]; //!< 頂点
 };
 
 // 加算
@@ -235,37 +239,6 @@ Matrix4x4 MakeViewportMatrix(float left, float top, float width, float height, f
 	return result;
 }
 
-// 法線と垂直なベクトルを1つ適当に求める関数
-Vector3 Perpendicular(const Vector3& vector) {
-	if (vector.x != 0.0f || vector.y != 0.0f) {
-		return { -vector.y, vector.x, 0.0f };
-	}
-	return { 0.0f, -vector.z, vector.y };
-}
-
-// 平面の描画関数
-void DrawPlane(const Plane& plane, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
-	Vector3 center = Multiply(plane.distance, plane.normal);
-	Vector3 perpendiculars[4];
-
-	perpendiculars[0] = Normalize(Perpendicular(plane.normal));
-	perpendiculars[1] = { -perpendiculars[0].x, -perpendiculars[0].y, -perpendiculars[0].z };
-	perpendiculars[2] = Cross(plane.normal, perpendiculars[0]);
-	perpendiculars[3] = { -perpendiculars[2].x, -perpendiculars[2].y, -perpendiculars[2].z };
-
-	Vector3 points[4];
-	for (int32_t index = 0; index < 4; ++index) {
-		Vector3 extend = Multiply(2.0f, perpendiculars[index]);
-		Vector3 point = Add(center, extend);
-		points[index] = Transform(Transform(point, viewProjectionMatrix), viewportMatrix);
-	}
-
-	Novice::DrawLine((int)points[0].x, (int)points[0].y, (int)points[2].x, (int)points[2].y, color);
-	Novice::DrawLine((int)points[2].x, (int)points[2].y, (int)points[1].x, (int)points[1].y, color);
-	Novice::DrawLine((int)points[1].x, (int)points[1].y, (int)points[3].x, (int)points[3].y, color);
-	Novice::DrawLine((int)points[3].x, (int)points[3].y, (int)points[0].x, (int)points[0].y, color);
-}
-
 // グリッド描画
 void DrawGrid(const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix) {
 	const float kGridHalfWidth = 2.0f;
@@ -293,10 +266,10 @@ void DrawGrid(const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMa
 	}
 }
 
-// 【新規実装】線分の描画関数
+// 線分の描画関数
 void DrawSegment(const Segment& segment, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
 	Vector3 start = segment.origin;
-	Vector3 end = Add(segment.origin, segment.diff); // 始点 + 差分 = 終点
+	Vector3 end = Add(segment.origin, segment.diff);
 
 	Vector3 screenStart = Transform(Transform(start, viewProjectionMatrix), viewportMatrix);
 	Vector3 screenEnd = Transform(Transform(end, viewProjectionMatrix), viewportMatrix);
@@ -304,24 +277,67 @@ void DrawSegment(const Segment& segment, const Matrix4x4& viewProjectionMatrix, 
 	Novice::DrawLine((int)screenStart.x, (int)screenStart.y, (int)screenEnd.x, (int)screenEnd.y, color);
 }
 
-// 【スライド1・2枚目要件】線分と平面の衝突判定関数
-bool IsCollision(const Segment& segment, const Plane& plane) {
-	// 1. まず垂直（平行）判定を行うために、法線と線の方向ベクトルの内積を求める
-	float dot = Dot(plane.normal, segment.diff);
+// 三角形の描画関数
+void DrawTriangle(const Triangle& triangle, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
+	Vector3 screenVertices[3];
+	for (int i = 0; i < 3; ++i) {
+		screenVertices[i] = Transform(Transform(triangle.vertices[i], viewProjectionMatrix), viewportMatrix);
+	}
 
-	// 2. 垂直＝平行（面と線が交わらない、または完全に含まれる）
-	// 誤差を考慮して 0.0f 付近の極小値で判定します
+	Novice::DrawTriangle(
+		(int)screenVertices[0].x, (int)screenVertices[0].y,
+		(int)screenVertices[1].x, (int)screenVertices[1].y,
+		(int)screenVertices[2].x, (int)screenVertices[2].y,
+		color, kFillModeWireFrame
+	);
+}
+
+// 三角形と線分の衝突判定関数
+bool IsCollision(const Triangle& triangle, const Segment& segment) {
+	// 1. 三角形から平面の法線を求める
+	Vector3 v01 = Subtract(triangle.vertices[1], triangle.vertices[0]);
+	Vector3 v12 = Subtract(triangle.vertices[2], triangle.vertices[1]);
+	Vector3 v20 = Subtract(triangle.vertices[0], triangle.vertices[2]);
+
+	// 法線は v01 と v12 の外積を正規化したもの
+	Vector3 normal = Normalize(Cross(v01, v12));
+	// 平面の原点からの距離 distance = Dot(頂点, 法線)
+	float distance = Dot(triangle.vertices[0], normal);
+
+	// 2. 線分と平面の衝突（交点）判定を行う
+	float dot = Dot(normal, segment.diff);
+
+	// 平行な場合は衝突しない
 	if (std::abs(dot) < 1e-6f) {
 		return false;
 	}
 
-	// 3. t を求める数式
-	float t = (plane.distance - Dot(segment.origin, plane.normal)) / dot;
+	// 交点までの媒介変数 t を求める
+	float t = (distance - Dot(segment.origin, normal)) / dot;
 
-	// 4. t の値によって、今回の「線分(Segment)」が平面と衝突しているかを判断する
-	// 直線(Line)なら常にtrue、半直線(Ray)なら t >= 0.0f、線分(Segment)なら 0.0f <= t <= 1.0f
-	if (t >= 0.0f && t <= 1.0f) {
-		return true;
+	// t が線分の範囲内（0〜1）にない場合は平面と交差していない
+	if (t < 0.0f || t > 1.0f) {
+		return false;
+	}
+
+	// 交点 p を計算
+	Vector3 p = Add(segment.origin, Multiply(t, segment.diff));
+
+	// 交点 p が三角形の内側にあるか外積を使って判定
+	Vector3 v1p = Subtract(p, triangle.vertices[0]);
+	Vector3 v2p = Subtract(p, triangle.vertices[1]);
+	Vector3 v0p = Subtract(p, triangle.vertices[2]);
+
+	// 各辺を結んだベクトルと、頂点と衝突点pを結んだベクトルのクロス積を取る
+	Vector3 cross01 = Cross(v01, v1p);
+	Vector3 cross12 = Cross(v12, v2p);
+	Vector3 cross20 = Cross(v20, v0p);
+
+	// すべての小三角形のクロス積と法線が同じ方向を向いていたら衝突
+	if (Dot(cross01, normal) >= 0.0f &&
+		Dot(cross12, normal) >= 0.0f &&
+		Dot(cross20, normal) >= 0.0f) {
+		return true; // 衝突
 	}
 
 	return false;
@@ -339,14 +355,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
 
-	// 【変更】球体を廃止し、スライド2・3枚目の通り線分（Segment）を定義
+	// 線分の初期化
 	Segment segment = {
-		{ 0.0f, 1.0f, 0.0f }, // origin
-		{ 1.0f, -1.0f, 0.0f } // diff
+		{ -0.22f, 0.42f, -1.81f }, // origin
+		{ 0.82f, 0.61f, 2.91f }    // diff
 	};
 
-	// 平面の定義（法線と原点からの距離）
-	Plane plane = { { 0.0f, 1.0f, 0.0f }, 0.0f };
+	//三角形の初期化
+	Triangle triangle = {
+		{
+			{ -1.43f, 0.0f, 0.0f }, // v0
+			{ 0.0f, 1.41f, 0.0f },  // v1
+			{ 1.43f, 0.0f, 0.0f }   // v2
+		}
+	};
 
 	// 実装イメージの画面に合わせるためのカメラアングル
 	Vector3 cameraTranslate{ 0.0f, 1.9f, -6.49f };
@@ -365,7 +387,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		/// ↓更新処理ここから
 		///
 
-		// カメラの簡易キー操作 (デバッグ効率化)
+		// カメラの簡易キー操作
 		if (keys[DIK_W]) cameraTranslate.z += 0.05f;
 		if (keys[DIK_S]) cameraTranslate.z -= 0.05f;
 		if (keys[DIK_A]) cameraTranslate.x -= 0.05f;
@@ -373,14 +395,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		if (keys[DIK_UP]) cameraRotate.x += 0.01f;
 		if (keys[DIK_DOWN]) cameraRotate.x -= 0.01f;
 
-		// ImGuiを使用したパラメータのリアルタイム変更機能（スライド3枚目のUI構成）
+		// ImGuiを使用したパラメータのリアルタイム変更機能
 		ImGui::Begin("Window");
 
-		// 平面のコントロール
-		if (ImGui::DragFloat3("Plane.Normal", &plane.normal.x, 0.01f)) {
-			plane.normal = Normalize(plane.normal);
-		}
-		ImGui::DragFloat("Plane.Distance", &plane.distance, 0.01f);
+		// 三角形の各頂点コントロール
+		ImGui::DragFloat3("Triangle.v0", &triangle.vertices[0].x, 0.01f);
+		ImGui::DragFloat3("Triangle.v1", &triangle.vertices[1].x, 0.01f);
+		ImGui::DragFloat3("Triangle.v2", &triangle.vertices[2].x, 0.01f);
 
 		// 線分（Segment）のコントロール
 		ImGui::DragFloat3("Segment.Origin", &segment.origin.x, 0.01f);
@@ -399,8 +420,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 5. ビューポート行列
 		Matrix4x4 viewportMatrix = MakeViewportMatrix(0, 0, 1280.0f, 720.0f, 0.0f, 1.0f);
 
-		// 【変更】線分と平面の衝突判定の実行
-		bool colliding = IsCollision(segment, plane);
+		// 三角形と線分の衝突判定の実行
+		bool colliding = IsCollision(triangle, segment);
 
 		///
 		/// ↑更新処理ここまで
@@ -413,10 +434,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// グリッドを描画
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
-		// 平面の描画
-		DrawPlane(plane, viewProjectionMatrix, viewportMatrix, 0x00FF00FF);
+		// 三角形の描画（白色でワイヤーフレーム表示）
+		DrawTriangle(triangle, viewProjectionMatrix, viewportMatrix, WHITE);
 
-		// 【変更】線分の描画 (スライド2枚目要件: 衝突時は赤色 RED:0xFF0000FF、非衝突時は白色 WHITE:0xFFFFFFFF)
+		// 線分の描画
 		uint32_t segmentColor = colliding ? RED : WHITE;
 		DrawSegment(segment, viewProjectionMatrix, viewportMatrix, segmentColor);
 
