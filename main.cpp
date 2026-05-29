@@ -39,6 +39,12 @@ struct AABB {
 	Vector3 max; //!< 最大点
 };
 
+struct OBB {
+	Vector3 center;
+	Vector3 orientations[3];
+	Vector3 size;
+};
+
 // 加算
 Vector3 Add(const Vector3& v1, const Vector3& v2) {
 	return { v1.x + v2.x, v1.y + v2.y, v1.z + v2.z };
@@ -462,6 +468,44 @@ bool IsCollision(const AABB& aabb, const Segment& segment) {
 	return true;
 }
 
+bool IsCollision(const OBB& obb, const Sphere& sphere) {
+	Vector3 closestPoint = obb.center;
+	Vector3 extents = Multiply(0.5f, obb.size);
+	float extentArray[3] = { extents.x, extents.y, extents.z };
+
+	for (int i = 0; i < 3; ++i) {
+		float distance = Dot(Subtract(sphere.center, obb.center), obb.orientations[i]);
+		distance = std::clamp(distance, -extentArray[i], extentArray[i]);
+		closestPoint = Add(closestPoint, Multiply(distance, obb.orientations[i]));
+	}
+	float distanceSquared = LengthSquared(Subtract(closestPoint, sphere.center));
+	return distanceSquared < (sphere.radius * sphere.radius);
+}
+
+void DrawOBB(const OBB& obb, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
+	Vector3 vertices[8];
+	for (int i = 0; i < 8; ++i) {
+		Vector3 corner = {
+			((i & 1) ? obb.size.x / 2.0f : -obb.size.x / 2.0f),
+			((i & 2) ? obb.size.y / 2.0f : -obb.size.y / 2.0f),
+			((i & 4) ? obb.size.z / 2.0f : -obb.size.z / 2.0f)
+		};
+		vertices[i] = Add(obb.center, Add(Multiply(corner.x, obb.orientations[0]), Add(Multiply(corner.y, obb.orientations[1]), Multiply(corner.z, obb.orientations[2]))));
+	}
+	int indices[12][2] = {
+		{ 0, 1 }, { 0, 2 }, { 2, 3 }, { 3, 1 },
+		{ 4, 5 }, { 4, 6 }, { 6, 7 }, { 7, 5 },
+		{ 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }
+	};
+	for (int i = 0; i < 12; ++i) {
+		Vector3 start = vertices[indices[i][0]];
+		Vector3 end = vertices[indices[i][1]];
+		Vector3 screenStart = Transform(Transform(start, viewProjectionMatrix), viewportMatrix);
+		Vector3 screenEnd = Transform(Transform(end, viewProjectionMatrix), viewportMatrix);
+		Novice::DrawLine((int)screenStart.x, (int)screenStart.y, (int)screenEnd.x, (int)screenEnd.y, color);
+	}
+}
+
 const char kWindowTitle[] = "LE2B_07_カワダ_リクト";
 
 // Windowsアプリでのエントリーポイント(main関数)
@@ -486,9 +530,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		{ 1.0f, 1.0f, 1.0f }     // max
 	};
 
-	Sphere sphere = { {0.0f, 0.0f, 0.0f}, 0.6f };
+	Sphere sphere = { {0.0f, 0.0f, 0.0f}, 0.5f };
 
 	Segment segment = { { -0.7f, 0.3f, 0.0f }, { 2.0f, -0.5f, 0.0f } };
+
+	Vector3 rotate = { 0.0f, 0.0f, 0.0f };
+	OBB obb = { {0.0f, 0.0f, 0.0f}, { {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f} }, {0.5f, 0.5f, 0.5f} };
+
 
 	// 実装イメージの画面に合わせるためのカメラアングル
 	Vector3 cameraTranslate{ 0.0f, 1.9f, -6.49f };
@@ -518,10 +566,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// ImGuiを使用したパラメータのリアルタイム変更機能
 		ImGui::Begin("Window");
 
-		ImGui::DragFloat3("AABB.Min", &aabb1.min.x, 0.01f);
-		ImGui::DragFloat3("AABB.Max", &aabb1.max.x, 0.01f);
-		ImGui::DragFloat3("segment.origin", &segment.origin.x, 0.01f);
-		ImGui::DragFloat3("segment.diff", &segment.diff.x, 0.01f);
+		ImGui::DragFloat3("OBB.Center", &obb.center.x, 0.01f);
+		ImGui::DragFloat("OBB.RotateX", &rotate.x, 0.01f);
+		ImGui::DragFloat("OBB.RotateY", &rotate.y, 0.01f);
+		ImGui::DragFloat("OBB.RotateZ", &rotate.z, 0.01f);
+		ImGui::DragFloat3("OBB.Orientations", &obb.orientations[0].x, 0.01f);
+		ImGui::DragFloat3("OBB.Orientations", &obb.orientations[1].x, 0.01f);
+		ImGui::DragFloat3("OBB.Orientations", &obb.orientations[2].x, 0.01f);
+		ImGui::DragFloat3("OBB.Size", &obb.size.x, 0.01f);
+		ImGui::DragFloat3("Sphere.Center", &sphere.center.x, 0.01f);
+		ImGui::DragFloat("Sphere.Radius", &sphere.radius, 0.01f);
 
 
 		ImGui::End();
@@ -537,7 +591,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 5. ビューポート行列
 		Matrix4x4 viewportMatrix = MakeViewportMatrix(0, 0, 1280.0f, 720.0f, 0.0f, 1.0f);
 
-		bool colliding = IsCollision(aabb1, segment);
+		bool colliding = IsCollision(obb, sphere);
+
+		Matrix4x4 rotateMatrix = Multiply(MakeRotationXMatrix(rotate.x), Multiply(MakeRotationYMatrix(rotate.y), MakeRotationZMatrix(rotate.z)));
+
+		obb.orientations[0].x = rotateMatrix.m[0][0];
+		obb.orientations[0].y = rotateMatrix.m[1][0];
+		obb.orientations[0].z = rotateMatrix.m[2][0];
+
+		obb.orientations[1].x = rotateMatrix.m[0][1];
+		obb.orientations[1].y = rotateMatrix.m[1][1];
+		obb.orientations[1].z = rotateMatrix.m[2][1];
+
+		obb.orientations[2].x = rotateMatrix.m[0][2];
+		obb.orientations[2].y = rotateMatrix.m[1][2];
+		obb.orientations[2].z = rotateMatrix.m[2][2];
 
 		///
 		/// ↑更新処理ここまで
@@ -551,9 +619,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
 		uint32_t aabbColor = colliding ? RED : WHITE;
-		DrawAABB(aabb1, viewProjectionMatrix, viewportMatrix, aabbColor);
-		
-		DrawSegment(segment, viewProjectionMatrix, viewportMatrix, 0xFFFFFFFF);
+		DrawSphere(sphere, viewProjectionMatrix, viewportMatrix, 0xFFFFFFFF);
+
+		DrawOBB(obb, viewProjectionMatrix, viewportMatrix, aabbColor);
 
 		///
 		/// ↑描画処理ここまで
