@@ -381,6 +381,52 @@ void DrawAABB(const AABB& aabb, const Matrix4x4& viewProjectionMatrix, const Mat
 	}
 }
 
+bool IsCollision(const AABB& aabb, const Sphere& sphere) {
+	// AABBと球の衝突判定（std::clamp を使用）
+	float closestX = std::clamp(sphere.center.x, aabb.min.x, aabb.max.x);
+	float closestY = std::clamp(sphere.center.y, aabb.min.y, aabb.max.y);
+	float closestZ = std::clamp(sphere.center.z, aabb.min.z, aabb.max.z);
+
+	float distanceSquared = (closestX - sphere.center.x) * (closestX - sphere.center.x) +
+		(closestY - sphere.center.y) * (closestY - sphere.center.y) +
+		(closestZ - sphere.center.z) * (closestZ - sphere.center.z);
+
+	return distanceSquared < (sphere.radius * sphere.radius);
+}
+
+void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
+	const uint32_t kSubdivision = 16;
+	const float kLonEvery = float(M_PI) / kSubdivision;
+	const float kLatEvery = (float(M_PI) * 2.0f) / kSubdivision;
+
+	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex) {
+		float lat = -float(M_PI) / 2.0f + kLatEvery * latIndex;
+
+		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
+			float lon = lonIndex * kLonEvery;
+
+			auto GetPoint = [&](float lat, float lon) {
+				Vector3 p;
+				p.x = sphere.radius * std::cos(lat) * std::cos(lon) + sphere.center.x;
+				p.y = sphere.radius * std::sin(lat) + sphere.center.y;
+				p.z = sphere.radius * std::cos(lat) * std::sin(lon) + sphere.center.z;
+				return p;
+				};
+
+			Vector3 a = GetPoint(lat, lon);
+			Vector3 b = GetPoint(lat, lon + kLonEvery);
+			Vector3 c = GetPoint(lat + kLatEvery, lon);
+
+			Vector3 screenA = Transform(Transform(a, viewProjectionMatrix), viewportMatrix);
+			Vector3 screenB = Transform(Transform(b, viewProjectionMatrix), viewportMatrix);
+			Vector3 screenC = Transform(Transform(c, viewProjectionMatrix), viewportMatrix);
+
+			Novice::DrawLine((int)screenA.x, (int)screenA.y, (int)screenB.x, (int)screenB.y, color);
+			Novice::DrawLine((int)screenA.x, (int)screenA.y, (int)screenC.x, (int)screenC.y, color);
+		}
+	}
+}
+
 const char kWindowTitle[] = "LE2B_07_カワダ_リクト";
 
 // Windowsアプリでのエントリーポイント(main関数)
@@ -393,7 +439,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
 
-	
+
 
 	AABB aabb1 = {
 		{ -0.5f, -0.5f, -0.5f }, // min
@@ -404,6 +450,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		{ -0.2f, -0.2f, -0.2f }, // min
 		{ 1.0f, 1.0f, 1.0f }     // max
 	};
+
+	Sphere sphere = { {0.0f, 0.0f, 0.0f}, 0.6f };
 
 	// 実装イメージの画面に合わせるためのカメラアングル
 	Vector3 cameraTranslate{ 0.0f, 1.9f, -6.49f };
@@ -433,10 +481,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// ImGuiを使用したパラメータのリアルタイム変更機能
 		ImGui::Begin("Window");
 
-		ImGui::DragFloat3("AABB1.Min", &aabb1.min.x, 0.01f);
-		ImGui::DragFloat3("AABB1.Max", &aabb1.max.x, 0.01f);
-		ImGui::DragFloat3("AABB2.Min", &aabb2.min.x, 0.01f);
-		ImGui::DragFloat3("AABB2.Max", &aabb2.max.x, 0.01f);
+		ImGui::DragFloat3("AABB.Min", &aabb1.min.x, 0.01f);
+		ImGui::DragFloat3("AABB.Max", &aabb1.max.x, 0.01f);
+		ImGui::DragFloat3("sphere.center", &sphere.center.x, 0.01f);
+		ImGui::DragFloat("sphere.radius", &sphere.radius, 0.01f);
 
 
 		ImGui::End();
@@ -452,7 +500,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 5. ビューポート行列
 		Matrix4x4 viewportMatrix = MakeViewportMatrix(0, 0, 1280.0f, 720.0f, 0.0f, 1.0f);
 
-		bool colliding = IsCollision(aabb1, aabb2);
+		bool colliding = IsCollision(aabb1, sphere);
 
 		///
 		/// ↑更新処理ここまで
@@ -467,7 +515,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		uint32_t aabbColor = colliding ? RED : WHITE;
 		DrawAABB(aabb1, viewProjectionMatrix, viewportMatrix, aabbColor);
-		DrawAABB(aabb2, viewProjectionMatrix, viewportMatrix, aabbColor);
+		
+		DrawSphere(sphere, viewProjectionMatrix, viewportMatrix, 0xFFFFFFFF);
 
 		///
 		/// ↑描画処理ここまで
