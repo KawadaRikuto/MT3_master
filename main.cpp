@@ -382,7 +382,7 @@ void DrawAABB(const AABB& aabb, const Matrix4x4& viewProjectionMatrix, const Mat
 }
 
 bool IsCollision(const AABB& aabb, const Sphere& sphere) {
-	// AABBと球の衝突判定（std::clamp を使用）
+	// AABBと球の衝突判定
 	float closestX = std::clamp(sphere.center.x, aabb.min.x, aabb.max.x);
 	float closestY = std::clamp(sphere.center.y, aabb.min.y, aabb.max.y);
 	float closestZ = std::clamp(sphere.center.z, aabb.min.z, aabb.max.z);
@@ -427,6 +427,41 @@ void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectionMatrix, con
 	}
 }
 
+bool IsCollision(const AABB& aabb, const Segment& segment) {
+	float tMin = 0.0f;
+	float tMax = 1.0f;
+
+	float origins[3] = { segment.origin.x, segment.origin.y, segment.origin.z };
+	float diffs[3] = { segment.diff.x, segment.diff.y, segment.diff.z };
+	float mins[3] = { aabb.min.x, aabb.min.y, aabb.min.z };
+	float maxs[3] = { aabb.max.x, aabb.max.y, aabb.max.z };
+
+	for (int i = 0; i < 3; ++i) {
+		if (std::abs(diffs[i]) < 1e-6f) {
+			if (origins[i] < mins[i] || origins[i] > maxs[i]) {
+				return false;
+			}
+		} else {
+			float t1 = (mins[i] - origins[i]) / diffs[i];
+			float t2 = (maxs[i] - origins[i]) / diffs[i];
+			if (t1 > t2) std::swap(t1, t2);
+
+			
+			if (t1 > tMin) {
+				tMin = t1;
+			}
+			if (t2 < tMax) {
+				tMax = t2;
+			}
+
+			if (tMin > tMax) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
 const char kWindowTitle[] = "LE2B_07_カワダ_リクト";
 
 // Windowsアプリでのエントリーポイント(main関数)
@@ -443,7 +478,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	AABB aabb1 = {
 		{ -0.5f, -0.5f, -0.5f }, // min
-		{ 0.0f, 0.0f, 0.0f }     // max
+		{ 0.5f, 0.5f, 0.5f }     // max
 	};
 
 	AABB aabb2 = {
@@ -452,6 +487,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	};
 
 	Sphere sphere = { {0.0f, 0.0f, 0.0f}, 0.6f };
+
+	Segment segment = { { -0.7f, 0.3f, 0.0f }, { 2.0f, -0.5f, 0.0f } };
 
 	// 実装イメージの画面に合わせるためのカメラアングル
 	Vector3 cameraTranslate{ 0.0f, 1.9f, -6.49f };
@@ -483,8 +520,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		ImGui::DragFloat3("AABB.Min", &aabb1.min.x, 0.01f);
 		ImGui::DragFloat3("AABB.Max", &aabb1.max.x, 0.01f);
-		ImGui::DragFloat3("sphere.center", &sphere.center.x, 0.01f);
-		ImGui::DragFloat("sphere.radius", &sphere.radius, 0.01f);
+		ImGui::DragFloat3("segment.origin", &segment.origin.x, 0.01f);
+		ImGui::DragFloat3("segment.diff", &segment.diff.x, 0.01f);
 
 
 		ImGui::End();
@@ -500,7 +537,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 5. ビューポート行列
 		Matrix4x4 viewportMatrix = MakeViewportMatrix(0, 0, 1280.0f, 720.0f, 0.0f, 1.0f);
 
-		bool colliding = IsCollision(aabb1, sphere);
+		bool colliding = IsCollision(aabb1, segment);
 
 		///
 		/// ↑更新処理ここまで
@@ -516,7 +553,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		uint32_t aabbColor = colliding ? RED : WHITE;
 		DrawAABB(aabb1, viewProjectionMatrix, viewportMatrix, aabbColor);
 		
-		DrawSphere(sphere, viewProjectionMatrix, viewportMatrix, 0xFFFFFFFF);
+		DrawSegment(segment, viewProjectionMatrix, viewportMatrix, 0xFFFFFFFF);
 
 		///
 		/// ↑描画処理ここまで
