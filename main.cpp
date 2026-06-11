@@ -571,25 +571,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
 
+	// 画像スライドの初期値を適用
 	AABB aabb1 = {
 		{ -0.5f, -0.5f, -0.5f },
-		{ 0.5f, 0.5f, 0.5f }
+		{  0.0f,  0.0f,  0.0f }
 	};
 
 	AABB aabb2 = {
-		{ -0.2f, -0.2f, -0.2f },
+		{ 0.2f, 0.2f, 0.2f },
 		{ 1.0f, 1.0f, 1.0f }
 	};
 
-	Sphere sphere = { {0.0f, 0.0f, 0.0f}, 0.5f };
-	Segment segment = { { -0.8f, -0.3f, 0.0f }, { 0.5f, 0.5f, 0.5f } };
-	Ray ray = { { -1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f } };
-	Line line = { { -1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f } };
-
-	Vector3 rotate = { 0.0f, 0.0f, 0.0f };
-	
-	OBB obb = { {-1.0f, 0.0f, 0.0f}, { {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f} }, {0.5f, 0.5f, 0.5f} };
-
+	// (その他の構造体定義はそのまま、あるいは今回使わないものはそのままでOKです)
 	Vector3 cameraTranslate{ 0.0f, 1.9f, -6.49f };
 	Vector3 cameraRotate{ 0.26f, 0.0f, 0.0f };
 
@@ -603,55 +596,55 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		if (keys[DIK_S]) cameraTranslate.z -= 0.05f;
 		if (keys[DIK_A]) cameraTranslate.x -= 0.05f;
 		if (keys[DIK_D]) cameraTranslate.x += 0.05f;
-		if (keys[DIK_UP]) cameraRotate.x += 0.01f;
-		if (keys[DIK_DOWN]) cameraRotate.x -= 0.01f;
-
-		ImGui::Begin("Window");
-
-		ImGui::DragFloat3("OBB.Center", &obb.center.x, 0.01f);
-		ImGui::DragFloat("OBB.RotateX", &rotate.x, 0.01f);
-		ImGui::DragFloat("OBB.RotateY", &rotate.y, 0.01f);
-		ImGui::DragFloat("OBB.RotateZ", &rotate.z, 0.01f);
 
 		
-		ImGui::DragFloat3("OBB.Orientations[0]", &obb.orientations[0].x, 0.01f);
-		ImGui::DragFloat3("OBB.Orientations[1]", &obb.orientations[1].x, 0.01f);
-		ImGui::DragFloat3("OBB.Orientations[2]", &obb.orientations[2].x, 0.01f);
+		ImGui::Begin("Window");
 
-		ImGui::DragFloat3("OBB.Size", &obb.size.x, 0.01f);
-		ImGui::DragFloat3("segment.origin", &segment.origin.x, 0.01f);
-		ImGui::DragFloat3("segment.diff", &segment.diff.x, 0.01f);
+		// AABB1のパラメータ変更
+		ImGui::DragFloat3("AABB1.Min", &aabb1.min.x, 0.01f);
+		ImGui::DragFloat3("AABB1.Max", &aabb1.max.x, 0.01f);
+
+		// AABB2のパラメータ変更
+		ImGui::DragFloat3("AABB2.Min", &aabb2.min.x, 0.01f);
+		ImGui::DragFloat3("AABB2.Max", &aabb2.max.x, 0.01f);
 
 		ImGui::End();
 
+		// 大小関係の保証処理 (1枚目のスライド通りに std::min / std::max で補正)
+		aabb1.min.x = (std::min)(aabb1.min.x, aabb1.max.x);
+		aabb1.max.x = (std::max)(aabb1.min.x, aabb1.max.x);
+		aabb1.min.y = (std::min)(aabb1.min.y, aabb1.max.y);
+		aabb1.max.y = (std::max)(aabb1.min.y, aabb1.max.y);
+		aabb1.min.z = (std::min)(aabb1.min.z, aabb1.max.z);
+		aabb1.max.z = (std::max)(aabb1.min.z, aabb1.max.z);
+
+		aabb2.min.x = (std::min)(aabb2.min.x, aabb2.max.x);
+		aabb2.max.x = (std::max)(aabb2.min.x, aabb2.max.x);
+		aabb2.min.y = (std::min)(aabb2.min.y, aabb2.max.y);
+		aabb2.max.y = (std::max)(aabb2.min.y, aabb2.max.y);
+		aabb2.min.z = (std::min)(aabb2.min.z, aabb2.max.z);
+		aabb2.max.z = (std::max)(aabb2.min.z, aabb2.max.z);
+		// -------------------------------------------------------------------------
+
+		// カメラ行列・ビューポート変換等の計算
 		Matrix4x4 cameraMatrix = MakeAffineMatrix({ 1.0f, 1.0f, 1.0f }, cameraRotate, cameraTranslate);
 		Matrix4x4 viewMatrix = Inverse(cameraMatrix);
 		Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, 1280.0f / 720.0f, 0.1f, 100.0f);
 		Matrix4x4 viewProjectionMatrix = Multiply(viewMatrix, projectionMatrix);
 		Matrix4x4 viewportMatrix = MakeViewportMatrix(0, 0, 1280.0f, 720.0f, 0.0f, 1.0f);
 
-		Matrix4x4 rotateMatrix = Multiply(MakeRotationXMatrix(rotate.x), Multiply(MakeRotationYMatrix(rotate.y), MakeRotationZMatrix(rotate.z)));
+		// AABB同士の衝突判定
+		bool colliding = IsCollision(aabb1, aabb2);
 
-		// 修正：行ベクトル形式（Row-major）の行列定義に則り、各行（m[0], m[1], m[2]）から軸の方向ベクトルを正しく抽出
-		obb.orientations[0].x = rotateMatrix.m[0][0];
-		obb.orientations[0].y = rotateMatrix.m[0][1];
-		obb.orientations[0].z = rotateMatrix.m[0][2];
-
-		obb.orientations[1].x = rotateMatrix.m[1][0];
-		obb.orientations[1].y = rotateMatrix.m[1][1];
-		obb.orientations[1].z = rotateMatrix.m[1][2];
-
-		obb.orientations[2].x = rotateMatrix.m[2][0];
-		obb.orientations[2].y = rotateMatrix.m[2][1];
-		obb.orientations[2].z = rotateMatrix.m[2][2];
-
-		bool colliding = IsCollision(segment, obb);
-
+		// 描画処理
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
-		uint32_t aabbColor = colliding ? RED : WHITE;
-		DrawSegment(segment, viewProjectionMatrix, viewportMatrix, 0xFFFFFFFF);
-		DrawOBB(obb, viewProjectionMatrix, viewportMatrix, aabbColor);
+		// 衝突していたら赤(RED)、していなければ白(WHITE)
+		uint32_t color = colliding ? RED : WHITE;
+
+		// 2つのAABBを描画
+		DrawAABB(aabb1, viewProjectionMatrix, viewportMatrix, color);
+		DrawAABB(aabb2, viewProjectionMatrix, viewportMatrix, color);
 
 		Novice::EndFrame();
 
