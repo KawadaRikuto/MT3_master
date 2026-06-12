@@ -628,12 +628,25 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
 
-	Vector3 controlPoints[3] = {
-		{ -0.8f, 0.58f, 1.0f },
-		{ 1.76f, 1.0f, -0.3f },
-		{ 0.94f, -0.7f, 2.3f }
+	Vector3 translates[3] = {
+		{ 0.2f, 1.0f, 0.0f },
+		{ 0.4f, 0.0f, 0.0f },
+		{ 0.3f, 0.0f, 0.0f }
 	};
 
+	Vector3 rotates[3] = {
+		{ 0.0f, 0.0f, -6.8f },
+		{ 0.0f, 0.0f, -1.4f },
+		{ 0.0f, 0.0f,  0.0f }
+	};
+
+	Vector3 scales[3] = {
+		{ 1.0f, 1.0f, 1.0f },
+		{ 1.0f, 1.0f, 1.0f },
+		{ 1.0f, 1.0f, 1.0f }
+	};
+
+	const float kSphereRadius = 0.05f;
 
 	Vector3 cameraTranslate{ 0.0f, 1.9f, -6.49f };
 	Vector3 cameraRotate{ 0.26f, 0.0f, 0.0f };
@@ -652,9 +665,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		
 		ImGui::Begin("Window");
 
-		ImGui::DragFloat3("controlPoins[0]", &controlPoints[0].x, 0.01f);
-		ImGui::DragFloat3("controlPoins[1]", &controlPoints[1].x, 0.01f);
-		ImGui::DragFloat3("controlPoins[2]", &controlPoints[2].x, 0.01f);
+		const char* labels[3] = { "Shoulder (0)", "Elbow (1)", "Hand (2)" };
+		for (int i = 0; i < 3; ++i) {
+			ImGui::PushID(i);
+			ImGui::DragFloat3("translates", &translates[i].x, 0.01f);
+			ImGui::DragFloat3("rotates", &rotates[i].x, 0.01f);
+			ImGui::DragFloat3("scales", &scales[i].x, 0.01f);
+			ImGui::Spacing();
+			ImGui::PopID();
+		}
 
 		ImGui::End();
 		
@@ -674,8 +693,40 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 衝突していたら赤(RED)、していなければ白(WHITE)
 		//uint32_t color = colliding ? RED : WHITE;
 
-		// 2つのAABBを描画
-		DrawBezier(controlPoints[0], controlPoints[1], controlPoints[2], viewProjectionMatrix, viewportMatrix, 0x0000FFFF);
+		// 肩
+		Matrix4x4 shoulderLocalMatrix = MakeAffineMatrix(scales[0], rotates[0], translates[0]);
+		Matrix4x4 shoulderWorldMatrix = shoulderLocalMatrix; // 親がいないのでローカルがそのままワールドになる
+
+		// 肘
+		Matrix4x4 elbowLocalMatrix = MakeAffineMatrix(scales[1], rotates[1], translates[1]);
+		Matrix4x4 elbowWorldMatrix = Multiply(elbowLocalMatrix, shoulderWorldMatrix); // 親のワールド × 自身のローカル
+
+		// 手
+		Matrix4x4 handLocalMatrix = MakeAffineMatrix(scales[2], rotates[2], translates[2]);
+		Matrix4x4 handWorldMatrix = Multiply(handLocalMatrix, elbowWorldMatrix); // 親のワールド × 自身のローカル
+
+		Vector3 worldPosShoulder = Transform({ 0.0f, 0.0f, 0.0f }, shoulderWorldMatrix);
+		Vector3 worldPosElbow = Transform({ 0.0f, 0.0f, 0.0f }, elbowWorldMatrix);
+		Vector3 worldPosHand = Transform({ 0.0f, 0.0f, 0.0f }, handWorldMatrix);
+
+		// 赤い球
+		Sphere shoulderSphere = { worldPosShoulder, kSphereRadius };
+		DrawSphere(shoulderSphere, viewProjectionMatrix, viewportMatrix, RED);
+
+		// 緑の球
+		Sphere elbowSphere = { worldPosElbow, kSphereRadius };
+		DrawSphere(elbowSphere, viewProjectionMatrix, viewportMatrix, GREEN);
+
+		// 青の球
+		Sphere handSphere = { worldPosHand, kSphereRadius };
+		DrawSphere(handSphere, viewProjectionMatrix, viewportMatrix, BLUE);
+
+		Vector3 screenPosShoulder = Transform(Transform(worldPosShoulder, viewProjectionMatrix), viewportMatrix);
+		Vector3 screenPosElbow = Transform(Transform(worldPosElbow, viewProjectionMatrix), viewportMatrix);
+		Vector3 screenPosHand = Transform(Transform(worldPosHand, viewProjectionMatrix), viewportMatrix);
+
+		Novice::DrawLine((int)screenPosShoulder.x, (int)screenPosShoulder.y, (int)screenPosElbow.x, (int)screenPosElbow.y, WHITE);
+		Novice::DrawLine((int)screenPosElbow.x, (int)screenPosElbow.y, (int)screenPosHand.x, (int)screenPosHand.y, WHITE);
 
 		Novice::EndFrame();
 
