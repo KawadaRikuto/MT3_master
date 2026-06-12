@@ -558,7 +558,7 @@ bool IsCollision(const Line& line, const OBB& obb) {
 		{ -obb.size.x, -obb.size.y, -obb.size.z },
 		{  obb.size.x,  obb.size.y,  obb.size.z }
 	};
-	Segment tempSegment = { localLinePoint, localLineDir }; // 簡易的にSegmentとして評価
+	Segment tempSegment = { localLinePoint, localLineDir };
 	return IsCollision(localAABB, tempSegment);
 }
 
@@ -571,18 +571,19 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
 
-	// 画像スライドの初期値を適用
-	AABB aabb1 = {
-		{ -0.5f, -0.5f, -0.5f },
-		{  0.0f,  0.0f,  0.0f }
+	Vector3 roatte{ 0.0f, 0.0f, 0.0f };
+
+	OBB obb{
+		{ -1.0f, 0.0f, 0.0f },
+		{ { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
+		{ 0.5f, 0.5f, 0.5f }
 	};
 
-	AABB aabb2 = {
-		{ 0.2f, 0.2f, 0.2f },
-		{ 1.0f, 1.0f, 1.0f }
+	Segment segment{
+		{ -0.8f, -0.3f, 0.0f },
+		{ 0.5f, 0.5f, 0.5f }
 	};
 
-	// (その他の構造体定義はそのまま、あるいは今回使わないものはそのままでOKです)
 	Vector3 cameraTranslate{ 0.0f, 1.9f, -6.49f };
 	Vector3 cameraRotate{ 0.26f, 0.0f, 0.0f };
 
@@ -600,32 +601,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		
 		ImGui::Begin("Window");
 
-		// AABB1のパラメータ変更
-		ImGui::DragFloat3("AABB1.Min", &aabb1.min.x, 0.01f);
-		ImGui::DragFloat3("AABB1.Max", &aabb1.max.x, 0.01f);
-
-		// AABB2のパラメータ変更
-		ImGui::DragFloat3("AABB2.Min", &aabb2.min.x, 0.01f);
-		ImGui::DragFloat3("AABB2.Max", &aabb2.max.x, 0.01f);
+		ImGui::DragFloat3("obb.center", &obb.center.x, 0.01f);
+		ImGui::DragFloat("rotateX", &cameraRotate.x, 0.01f);
+		ImGui::DragFloat("rotateY", &cameraRotate.y, 0.01f);
+		ImGui::DragFloat("rotateZ", &cameraRotate.z, 0.01f);
+		ImGui::DragFloat3("obb.orientations", &obb.orientations[0].x, 0.01f);
+		ImGui::DragFloat3("obb.orientations", &obb.orientations[1].x, 0.01f);
+		ImGui::DragFloat3("obb.orientations", &obb.orientations[2].x, 0.01f);
+		ImGui::DragFloat3("obb.size", &obb.size.x, 0.01f);
+		ImGui::DragFloat3("segment.origin", &segment.origin.x, 0.01f);
+		ImGui::DragFloat3("segment.diff", &segment.diff.x, 0.01f);
 
 		ImGui::End();
 
-		// 大小関係の保証処理 (1枚目のスライド通りに std::min / std::max で補正)
-		aabb1.min.x = (std::min)(aabb1.min.x, aabb1.max.x);
-		aabb1.max.x = (std::max)(aabb1.min.x, aabb1.max.x);
-		aabb1.min.y = (std::min)(aabb1.min.y, aabb1.max.y);
-		aabb1.max.y = (std::max)(aabb1.min.y, aabb1.max.y);
-		aabb1.min.z = (std::min)(aabb1.min.z, aabb1.max.z);
-		aabb1.max.z = (std::max)(aabb1.min.z, aabb1.max.z);
-
-		aabb2.min.x = (std::min)(aabb2.min.x, aabb2.max.x);
-		aabb2.max.x = (std::max)(aabb2.min.x, aabb2.max.x);
-		aabb2.min.y = (std::min)(aabb2.min.y, aabb2.max.y);
-		aabb2.max.y = (std::max)(aabb2.min.y, aabb2.max.y);
-		aabb2.min.z = (std::min)(aabb2.min.z, aabb2.max.z);
-		aabb2.max.z = (std::max)(aabb2.min.z, aabb2.max.z);
-		// -------------------------------------------------------------------------
-
+		
 		// カメラ行列・ビューポート変換等の計算
 		Matrix4x4 cameraMatrix = MakeAffineMatrix({ 1.0f, 1.0f, 1.0f }, cameraRotate, cameraTranslate);
 		Matrix4x4 viewMatrix = Inverse(cameraMatrix);
@@ -634,7 +623,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		Matrix4x4 viewportMatrix = MakeViewportMatrix(0, 0, 1280.0f, 720.0f, 0.0f, 1.0f);
 
 		// AABB同士の衝突判定
-		bool colliding = IsCollision(aabb1, aabb2);
+		bool colliding = IsCollision(segment, obb);
 
 		// 描画処理
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
@@ -643,8 +632,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		uint32_t color = colliding ? RED : WHITE;
 
 		// 2つのAABBを描画
-		DrawAABB(aabb1, viewProjectionMatrix, viewportMatrix, color);
-		DrawAABB(aabb2, viewProjectionMatrix, viewportMatrix, color);
+		DrawOBB(obb, viewProjectionMatrix, viewportMatrix, color);
+		DrawSegment(segment, viewProjectionMatrix, viewportMatrix, color);
 
 		Novice::EndFrame();
 
