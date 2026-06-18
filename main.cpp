@@ -461,7 +461,7 @@ bool IsCollision(const AABB& aabb, const Segment& segment) {
 
 bool IsCollision(const OBB& obb, const Sphere& sphere) {
 	Vector3 closestPoint = obb.center;
-	
+
 	float extentArray[3] = { obb.size.x, obb.size.y, obb.size.z };
 
 	for (int i = 0; i < 3; ++i) {
@@ -475,7 +475,7 @@ bool IsCollision(const OBB& obb, const Sphere& sphere) {
 
 void DrawOBB(const OBB& obb, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
 	Vector3 vertices[8];
-	
+
 	for (int i = 0; i < 8; ++i) {
 		Vector3 corner = {
 			((i & 1) ? obb.size.x : -obb.size.x),
@@ -523,6 +523,7 @@ bool IsCollision(const Segment& segment, const OBB& obb) {
 
 
 bool IsCollision(const Ray& ray, const OBB& obb) {
+	// RayをOBBのローカル空間（AABB）に変換
 	Vector3 localOrigin = Subtract(ray.origin, obb.center);
 	Vector3 localRayOrigin = {
 		Dot(localOrigin, obb.orientations[0]),
@@ -534,89 +535,75 @@ bool IsCollision(const Ray& ray, const OBB& obb) {
 		Dot(ray.direction, obb.orientations[1]),
 		Dot(ray.direction, obb.orientations[2])
 	};
-	AABB localAABB = {
-		{ -obb.size.x, -obb.size.y, -obb.size.z },
-		{  obb.size.x,  obb.size.y,  obb.size.z }
-	};
-	Segment tempSegment = { localRayOrigin, localRayDir }; // 簡易的にSegmentとして評価
-	return IsCollision(localAABB, tempSegment);
+
+	// OBBのローカル空間での範囲（AABB相当）
+	float extents[3] = { obb.size.x, obb.size.y, obb.size.z };
+	float origins[3] = { localRayOrigin.x, localRayOrigin.y, localRayOrigin.z };
+	float dirs[3] = { localRayDir.x, localRayDir.y, localRayDir.z };
+
+	float tMin = 0.0f;           // Rayは前方に無限（t >= 0）
+	float tMax = 1e+30f;         // 正の無限大のシミュレート
+
+	for (int i = 0; i < 3; ++i) {
+		if (std::abs(dirs[i]) < 1e-6f) {
+			// 軸に平行な場合、範囲外なら交差しない
+			if (origins[i] < -extents[i] || origins[i] > extents[i]) {
+				return false;
+			}
+		} else {
+			float t1 = (-extents[i] - origins[i]) / dirs[i];
+			float t2 = (extents[i] - origins[i]) / dirs[i];
+			if (t1 > t2) std::swap(t1, t2);
+
+			if (t1 > tMin) tMin = t1;
+			if (t2 < tMax) tMax = t2;
+
+			if (tMin > tMax) return false;
+		}
+	}
+	return true;
 }
 
 bool IsCollision(const Line& line, const OBB& obb) {
-	Vector3 localPoint = Subtract(line.point, obb.center);
-	Vector3 localLinePoint = {
-		Dot(localPoint, obb.orientations[0]),
-		Dot(localPoint, obb.orientations[1]),
-		Dot(localPoint, obb.orientations[2])
+	// LineをOBBのローカル空間（AABB）に変換
+	Vector3 localOrigin = Subtract(line.point, obb.center);
+	Vector3 localLineOrigin = {
+		Dot(localOrigin, obb.orientations[0]),
+		Dot(localOrigin, obb.orientations[1]),
+		Dot(localOrigin, obb.orientations[2])
 	};
 	Vector3 localLineDir = {
 		Dot(line.direction, obb.orientations[0]),
 		Dot(line.direction, obb.orientations[1]),
 		Dot(line.direction, obb.orientations[2])
 	};
-	AABB localAABB = {
-		{ -obb.size.x, -obb.size.y, -obb.size.z },
-		{  obb.size.x,  obb.size.y,  obb.size.z }
-	};
-	Segment tempSegment = { localLinePoint, localLineDir };
-	return IsCollision(localAABB, tempSegment);
-}
 
-bool IsCollision(const OBB& obb1, const OBB& obb2) {
-	// OBB同士の衝突判定はSeparating Axis Theorem (SAT)を使用
-	Vector3 axes[15];
-	int axisCount = 0;
-	// obb1の法線
+	// OBBのローカル空間での範囲（AABB相当）
+	float extents[3] = { obb.size.x, obb.size.y, obb.size.z };
+	float origins[3] = { localLineOrigin.x, localLineOrigin.y, localLineOrigin.z };
+	float dirs[3] = { localLineDir.x, localLineDir.y, localLineDir.z };
+
+	float tMin = -1e+30f;        // Lineは両方向に無限（負の無限大）
+	float tMax = 1e+30f;         // 正の無限大
+
 	for (int i = 0; i < 3; ++i) {
-		axes[axisCount++] = obb1.orientations[i];
-	}
-	// obb2の法線
-	for (int i = 0; i < 3; ++i) {
-		axes[axisCount++] = obb2.orientations[i];
-	}
-	// クロス積による軸
-	for (int i = 0; i < 3; ++i) {
-		for (int j = 0; j < 3; ++j) {
-			Vector3 cross = Cross(obb1.orientations[i], obb2.orientations[j]);
-			if (LengthSquared(cross) > 1e-6f) {
-				axes[axisCount++] = Normalize(cross);
+		if (std::abs(dirs[i]) < 1e-6f) {
+			// 軸に平行な場合、範囲外なら交差しない
+			if (origins[i] < -extents[i] || origins[i] > extents[i]) {
+				return false;
 			}
-		}
-	}
-	for (int i = 0; i < axisCount; ++i) {
-		Vector3 axis = axes[i];
-		auto ProjectOBB = [&](const OBB& obb) {
-			float centerProjection = Dot(obb.center, axis);
-			float extentProjection =
-				std::abs(Dot(obb.orientations[0], axis)) * obb.size.x +
-				std::abs(Dot(obb.orientations[1], axis)) * obb.size.y +
-				std::abs(Dot(obb.orientations[2], axis)) * obb.size.z;
-			return std::make_pair(centerProjection - extentProjection, centerProjection + extentProjection);
-		};
-		auto [min1, max1] = ProjectOBB(obb1);
-		auto [min2, max2] = ProjectOBB(obb2);
-		if (max1 < min2 || max2 < min1) {
-			return false;
+		} else {
+			float t1 = (-extents[i] - origins[i]) / dirs[i];
+			float t2 = (extents[i] - origins[i]) / dirs[i];
+			if (t1 > t2) std::swap(t1, t2);
+
+			if (t1 > tMin) tMin = t1;
+			if (t2 < tMax) tMax = t2;
+
+			if (tMin > tMax) return false;
 		}
 	}
 	return true;
-}
-
-Vector3 Lerp(const Vector3& v1, const Vector3& v2, float t) {
-	return Add(Multiply(1.0f - t, v1), Multiply(t, v2));
-}
-
-void DrawBezier(const Vector3& controlPoint0, const Vector3& controlPoint1, const Vector3& controlPoint2, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
-	const uint32_t kSubdivision = 20;
-	Vector3 previousPoint = controlPoint0;
-	for (uint32_t i = 1; i <= kSubdivision; ++i) {
-		float t = float(i) / kSubdivision;
-		Vector3 point = Lerp(Lerp(controlPoint0, controlPoint1, t), Lerp(controlPoint1, controlPoint2, t), t);
-		Vector3 screenPrevious = Transform(Transform(previousPoint, viewProjectionMatrix), viewportMatrix);
-		Vector3 screenCurrent = Transform(Transform(point, viewProjectionMatrix), viewportMatrix);
-		Novice::DrawLine((int)screenPrevious.x, (int)screenPrevious.y, (int)screenCurrent.x, (int)screenCurrent.y, color);
-		previousPoint = point;
-	}
 }
 
 const char kWindowTitle[] = "LE2B_07_カワダ_リクト";
@@ -628,25 +615,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
 
-	Vector3 translates[3] = {
-		{ 0.2f, 1.0f, 0.0f },
-		{ 0.4f, 0.0f, 0.0f },
-		{ 0.3f, 0.0f, 0.0f }
+	Vector3 roatte{ 0.0f, 0.0f, 0.0f };
+
+	OBB obb{
+		{ -1.0f, 0.0f, 0.0f },
+		{ { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
+		{ 0.5f, 0.5f, 0.5f }
 	};
 
-	Vector3 rotates[3] = {
-		{ 0.0f, 0.0f, -6.8f },
-		{ 0.0f, 0.0f, -1.4f },
-		{ 0.0f, 0.0f,  0.0f }
+	Segment segment{
+		{ -0.8f, -0.3f, 0.0f },
+		{ 0.5f, 0.5f, 0.5f }
 	};
-
-	Vector3 scales[3] = {
-		{ 1.0f, 1.0f, 1.0f },
-		{ 1.0f, 1.0f, 1.0f },
-		{ 1.0f, 1.0f, 1.0f }
-	};
-
-	const float kSphereRadius = 0.05f;
 
 	Vector3 cameraTranslate{ 0.0f, 1.9f, -6.49f };
 	Vector3 cameraRotate{ 0.26f, 0.0f, 0.0f };
@@ -662,21 +642,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		if (keys[DIK_A]) cameraTranslate.x -= 0.05f;
 		if (keys[DIK_D]) cameraTranslate.x += 0.05f;
 
-		
+
 		ImGui::Begin("Window");
 
-		const char* labels[3] = { "Shoulder (0)", "Elbow (1)", "Hand (2)" };
-		for (int i = 0; i < 3; ++i) {
-			ImGui::PushID(i);
-			ImGui::DragFloat3("translates", &translates[i].x, 0.01f);
-			ImGui::DragFloat3("rotates", &rotates[i].x, 0.01f);
-			ImGui::DragFloat3("scales", &scales[i].x, 0.01f);
-			ImGui::Spacing();
-			ImGui::PopID();
-		}
+		ImGui::DragFloat3("obb.center", &obb.center.x, 0.01f);
+		ImGui::DragFloat("rotateX", &cameraRotate.x, 0.01f);
+		ImGui::DragFloat("rotateY", &cameraRotate.y, 0.01f);
+		ImGui::DragFloat("rotateZ", &cameraRotate.z, 0.01f);
+		ImGui::DragFloat3("obb.orientations", &obb.orientations[0].x, 0.01f);
+		ImGui::DragFloat3("obb.orientations", &obb.orientations[1].x, 0.01f);
+		ImGui::DragFloat3("obb.orientations", &obb.orientations[2].x, 0.01f);
+		ImGui::DragFloat3("obb.size", &obb.size.x, 0.01f);
+		ImGui::DragFloat3("segment.origin", &segment.origin.x, 0.01f);
+		ImGui::DragFloat3("segment.diff", &segment.diff.x, 0.01f);
 
 		ImGui::End();
-		
+
+
 		// カメラ行列・ビューポート変換等の計算
 		Matrix4x4 cameraMatrix = MakeAffineMatrix({ 1.0f, 1.0f, 1.0f }, cameraRotate, cameraTranslate);
 		Matrix4x4 viewMatrix = Inverse(cameraMatrix);
@@ -684,49 +666,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		Matrix4x4 viewProjectionMatrix = Multiply(viewMatrix, projectionMatrix);
 		Matrix4x4 viewportMatrix = MakeViewportMatrix(0, 0, 1280.0f, 720.0f, 0.0f, 1.0f);
 
-		// AABB同士の衝突判定
-		//bool colliding = IsCollision(obb1, obb2);
+		// SegmentとOBBの衝突判定
+		bool colliding = IsCollision(segment, obb);
 
 		// 描画処理
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
 		// 衝突していたら赤(RED)、していなければ白(WHITE)
-		//uint32_t color = colliding ? RED : WHITE;
+		uint32_t color = colliding ? RED : WHITE;
 
-		// 肩
-		Matrix4x4 shoulderLocalMatrix = MakeAffineMatrix(scales[0], rotates[0], translates[0]);
-		Matrix4x4 shoulderWorldMatrix = shoulderLocalMatrix; // 親がいないのでローカルがそのままワールドになる
-
-		// 肘
-		Matrix4x4 elbowLocalMatrix = MakeAffineMatrix(scales[1], rotates[1], translates[1]);
-		Matrix4x4 elbowWorldMatrix = Multiply(elbowLocalMatrix, shoulderWorldMatrix); // 親のワールド × 自身のローカル
-
-		// 手
-		Matrix4x4 handLocalMatrix = MakeAffineMatrix(scales[2], rotates[2], translates[2]);
-		Matrix4x4 handWorldMatrix = Multiply(handLocalMatrix, elbowWorldMatrix); // 親のワールド × 自身のローカル
-
-		Vector3 worldPosShoulder = Transform({ 0.0f, 0.0f, 0.0f }, shoulderWorldMatrix);
-		Vector3 worldPosElbow = Transform({ 0.0f, 0.0f, 0.0f }, elbowWorldMatrix);
-		Vector3 worldPosHand = Transform({ 0.0f, 0.0f, 0.0f }, handWorldMatrix);
-
-		// 赤い球
-		Sphere shoulderSphere = { worldPosShoulder, kSphereRadius };
-		DrawSphere(shoulderSphere, viewProjectionMatrix, viewportMatrix, RED);
-
-		// 緑の球
-		Sphere elbowSphere = { worldPosElbow, kSphereRadius };
-		DrawSphere(elbowSphere, viewProjectionMatrix, viewportMatrix, GREEN);
-
-		// 青の球
-		Sphere handSphere = { worldPosHand, kSphereRadius };
-		DrawSphere(handSphere, viewProjectionMatrix, viewportMatrix, BLUE);
-
-		Vector3 screenPosShoulder = Transform(Transform(worldPosShoulder, viewProjectionMatrix), viewportMatrix);
-		Vector3 screenPosElbow = Transform(Transform(worldPosElbow, viewProjectionMatrix), viewportMatrix);
-		Vector3 screenPosHand = Transform(Transform(worldPosHand, viewProjectionMatrix), viewportMatrix);
-
-		Novice::DrawLine((int)screenPosShoulder.x, (int)screenPosShoulder.y, (int)screenPosElbow.x, (int)screenPosElbow.y, WHITE);
-		Novice::DrawLine((int)screenPosElbow.x, (int)screenPosElbow.y, (int)screenPosHand.x, (int)screenPosHand.y, WHITE);
+		// 2つのAABBを描画
+		DrawOBB(obb, viewProjectionMatrix, viewportMatrix, color);
+		DrawSegment(segment, viewProjectionMatrix, viewportMatrix, color);
 
 		Novice::EndFrame();
 
