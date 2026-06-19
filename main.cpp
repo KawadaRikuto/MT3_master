@@ -692,20 +692,22 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
 
-	Spring spring{};
-	spring.anchor = { 0.0f, 0.0f, 0.0f };
-	spring.naturalLength = 1.0f;
-	spring.stiffness = 100.0f;
-	spring.dampingCoefficient = 2.0f;
-
-	Ball ball{};
-	ball.position = { 1.2f, 0.0f, 0.0f };
-	ball.mass = 2.0f;
-	ball.radius = 0.05f;
-	ball.color = BLUE;
+	float angularVelocity = 3.14f;
+	float angle = 0.0f;
 
 	float deltaTime = 1.0f / 60.0f;
 
+	Vector3 center = { 0.0f, 0.0f, 0.0f };
+	float radius = 0.8f;
+
+	
+	Sphere ball{};
+	ball.radius = 0.1f;
+	ball.center = { center.x + radius, center.y, center.z };
+
+	
+	bool isMoving = false;
+	
 
 	Vector3 cameraTranslate{ 0.0f, 1.9f, -6.49f };
 	Vector3 cameraRotate{ 0.26f, 0.0f, 0.0f };
@@ -724,29 +726,22 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		ImGui::Begin("Window");
 
-		if(ImGui::Button("Reset")) {
-			ball.position = { 1.2f, 0.0f, 0.0f };
+		if (ImGui::Button("Start")) {
+			isMoving = true;
 		}
 
 		ImGui::End();
 
-		Vector3 diff = ball.position - spring.anchor;
-		float length = Length(diff);
-		if (length != 0.0f) {
-			Vector3 direction = Normalize(diff);
-			Vector3 restPosition = spring.anchor + direction * spring.naturalLength;
-			Vector3 displacement = length * (ball.position - restPosition);
-			Vector3 restoringForce = -spring.stiffness * displacement;
-			Vector3 dampingForce = -spring.dampingCoefficient * ball.velocity;
-			Vector3 force = restoringForce + dampingForce;
-			ball.acceleration = force / ball.mass;
+
+		if (isMoving) {
+			angle += angularVelocity * deltaTime;
 		}
 
 		
-
-		ball.velocity += ball.acceleration * deltaTime;
-		ball.position += ball.velocity * deltaTime;
-
+		ball.center.x = center.x + std::cos(angle) * radius;
+		ball.center.y = center.y + std::sin(angle) * radius;
+		ball.center.z = center.z;
+		
 		// カメラ行列・ビューポート変換等の計算
 		Matrix4x4 cameraMatrix = MakeAffineMatrix({ 1.0f, 1.0f, 1.0f }, cameraRotate, cameraTranslate);
 		Matrix4x4 viewMatrix = Inverse(cameraMatrix);
@@ -764,9 +759,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		//uint32_t color = colliding ? RED : WHITE;
 
 		// 描画
-		DrawSphere({ ball.position, ball.radius }, viewProjectionMatrix, viewportMatrix, ball.color);
-		DrawSegment({ spring.anchor, ball.position - spring.anchor }, viewProjectionMatrix, viewportMatrix, WHITE);
-
+		DrawSphere(ball, viewProjectionMatrix, viewportMatrix, 0xFFFFFFFF);
+		
 		Novice::EndFrame();
 
 		if (preKeys[DIK_ESCAPE] == 0 && keys[DIK_ESCAPE] != 0) {
