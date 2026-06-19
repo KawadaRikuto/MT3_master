@@ -55,6 +55,22 @@ struct Line {
 	Vector3 direction;
 };
 
+struct Spring {
+	Vector3 anchor;
+	float naturalLength;
+	float stiffness;
+	float dampingCoefficient;
+};
+
+struct Ball {
+	Vector3 position;
+	Vector3 velocity;
+	Vector3 acceleration;
+	float mass;
+	float radius;
+	unsigned int color;
+};
+
 // 加算
 Vector3 Add(const Vector3& v1, const Vector3& v2) {
 	return { v1.x + v2.x, v1.y + v2.y, v1.z + v2.z };
@@ -644,7 +660,8 @@ Vector3 operator*(const Vector3& v, float s) {
 	return s * v;
 }
 
-Vector3 operator/(float s, const Vector3& v) {
+// Vector3型の/（スカラー除算）演算子オーバーロードを追加
+Vector3 operator/(const Vector3& v, float s) {
 	return Multiply(1.0f / s, v);
 }
 
@@ -660,6 +677,12 @@ Matrix4x4 operator*( const Matrix4x4& m1, const Matrix4x4& m2 ) {
 	return Multiply(m1, m2);
 }
 
+// Vector3型の+=演算子オーバーロードを追加
+Vector3& operator+=(Vector3& lhs, const Vector3& rhs) {
+	lhs = lhs + rhs;
+	return lhs;
+}
+
 const char kWindowTitle[] = "LE2B_07_カワダ_リクト";
 
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
@@ -669,27 +692,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
 
-	OBB obb{
-		{ -1.0f, 0.0f, 0.0f },
-		{ { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
-		{ 0.5f, 0.5f, 0.5f }
-	};
+	Spring spring{};
+	spring.anchor = { 0.0f, 0.0f, 0.0f };
+	spring.naturalLength = 1.0f;
+	spring.stiffness = 100.0f;
+	spring.dampingCoefficient = 2.0f;
 
-	Segment segment{
-		{ -0.8f, -0.3f, 0.0f },
-		{ 0.5f, 0.5f, 0.5f }
-	};
+	Ball ball{};
+	ball.position = { 1.2f, 0.0f, 0.0f };
+	ball.mass = 2.0f;
+	ball.radius = 0.05f;
+	ball.color = BLUE;
 
-	Vector3 a{ 0.2f, 1.0f, 0.0f };
-	Vector3 b{ 2.4f, 3.1f, 1.2f };
-	Vector3 c = a + b;
-	Vector3 d = a - b;
-	Vector3 e = a * 2.4f;
-	Vector3 rotate{ 0.4f, 1.43f, -0.8f };
-	Matrix4x4 rotateXMatrix = MakeRotationXMatrix(rotate.x);
-	Matrix4x4 rotateYMatrix = MakeRotationYMatrix(rotate.y);
-	Matrix4x4 rotateZMatrix = MakeRotationZMatrix(rotate.z);
-	Matrix4x4 rotateMatrix = rotateXMatrix * rotateYMatrix * rotateZMatrix;
+	float deltaTime = 1.0f / 60.0f;
+
 
 	Vector3 cameraTranslate{ 0.0f, 1.9f, -6.49f };
 	Vector3 cameraRotate{ 0.26f, 0.0f, 0.0f };
@@ -708,18 +724,28 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		ImGui::Begin("Window");
 
-		ImGui::Text("c:%f, %f, %f", c.x, c.y, c.z);
-		ImGui::Text("d:%f, %f, %f", d.x, d.y, d.z);
-		ImGui::Text("e:%f, %f, %f", e.x, e.y, e.z);
-		ImGui::Text("matrix:\n%f, %f, %f, %f\n%f, %f, %f, %f\n%f, %f, %f, %f\n%f, %f, %f, %f",
-			rotateMatrix.m[0][0], rotateMatrix.m[0][1], rotateMatrix.m[0][2], rotateMatrix.m[0][3],
-			rotateMatrix.m[1][0], rotateMatrix.m[1][1], rotateMatrix.m[1][2], rotateMatrix.m[1][3],
-			rotateMatrix.m[2][0], rotateMatrix.m[2][1], rotateMatrix.m[2][2], rotateMatrix.m[2][3],
-			rotateMatrix.m[3][0], rotateMatrix.m[3][1], rotateMatrix.m[3][2], rotateMatrix.m[3][3]
-		);
+		if(ImGui::Button("Reset")) {
+			ball.position = { 1.2f, 0.0f, 0.0f };
+		}
 
 		ImGui::End();
 
+		Vector3 diff = ball.position - spring.anchor;
+		float length = Length(diff);
+		if (length != 0.0f) {
+			Vector3 direction = Normalize(diff);
+			Vector3 restPosition = spring.anchor + direction * spring.naturalLength;
+			Vector3 displacement = length * (ball.position - restPosition);
+			Vector3 restoringForce = -spring.stiffness * displacement;
+			Vector3 dampingForce = -spring.dampingCoefficient * ball.velocity;
+			Vector3 force = restoringForce + dampingForce;
+			ball.acceleration = force / ball.mass;
+		}
+
+		
+
+		ball.velocity += ball.acceleration * deltaTime;
+		ball.position += ball.velocity * deltaTime;
 
 		// カメラ行列・ビューポート変換等の計算
 		Matrix4x4 cameraMatrix = MakeAffineMatrix({ 1.0f, 1.0f, 1.0f }, cameraRotate, cameraTranslate);
@@ -732,14 +758,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		//bool colliding = IsCollision(segment, obb);
 
 		// 描画処理
-		//DrawGrid(viewProjectionMatrix, viewportMatrix);
+		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
 		// 衝突していたら赤(RED)、していなければ白(WHITE)
 		//uint32_t color = colliding ? RED : WHITE;
 
-		// 2つのAABBを描画
-		//DrawOBB(obb, viewProjectionMatrix, viewportMatrix, color);
-		//DrawSegment(segment, viewProjectionMatrix, viewportMatrix, color);
+		// 描画
+		DrawSphere({ ball.position, ball.radius }, viewProjectionMatrix, viewportMatrix, ball.color);
+		DrawSegment({ spring.anchor, ball.position - spring.anchor }, viewProjectionMatrix, viewportMatrix, WHITE);
 
 		Novice::EndFrame();
 
