@@ -71,6 +71,14 @@ struct Ball {
 	unsigned int color;
 };
 
+struct Pendulum {
+	Vector3 anchor;
+	float length;
+	float angle;
+	float angularVelocity;
+	float angularAcceleration;
+};
+
 // 加算
 Vector3 Add(const Vector3& v1, const Vector3& v2) {
 	return { v1.x + v2.x, v1.y + v2.y, v1.z + v2.z };
@@ -707,17 +715,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
 
-	Vector3 a{ 0.2f, 1.0f, 0.0f };
-	Vector3 b{ 2.4f, 3.1f, 1.2f };
-	Vector3 c = a + b;
-	Vector3 d = a - b;
-	Vector3 e = a * 2.4f;
-	Vector3 rotate{ 0.4f, 1.43f,-0.8f };
-	Matrix4x4 rotateXMatrix = MakeRotationXMatrix(rotate.x);
-	Matrix4x4 rotateYMatrix = MakeRotationYMatrix(rotate.y);
-	Matrix4x4 rotateZMatrix = MakeRotationZMatrix(rotate.z);
-	Matrix4x4 rotateMatrix = rotateXMatrix * rotateYMatrix * rotateZMatrix;
+	const float deltaTime = 1.0f / 60.0f;
 
+	Pendulum pendulum;
+	pendulum.anchor = { 0.0f, 1.0f, 0.0f };
+	pendulum.length = 0.8f;
+	pendulum.angle = 0.7f;
+	pendulum.angularVelocity = 0.0f;
+	pendulum.angularAcceleration = 0.0f;
+
+	
+	Vector3 p;
 
 	Vector3 cameraTranslate{ 0.0f, 1.9f, -6.49f };
 	Vector3 cameraRotate{ 0.26f, 0.0f, 0.0f };
@@ -733,18 +741,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		if (keys[DIK_A]) cameraTranslate.x -= 0.05f;
 		if (keys[DIK_D]) cameraTranslate.x += 0.05f;
 
+		pendulum.angularAcceleration = -(9.8f / pendulum.length) * std::sin(pendulum.angle);
+		pendulum.angularVelocity += pendulum.angularAcceleration * deltaTime;
+		pendulum.angle += pendulum.angularVelocity * deltaTime;
+
+		p.x = pendulum.anchor.x + std::sin(pendulum.angle) * pendulum.length;
+		p.y = pendulum.anchor.y - std::cos(pendulum.angle) * pendulum.length;
+		p.z = pendulum.anchor.z;
+		
 
 		ImGui::Begin("Window");
 
-		ImGui::Text("c:%f, %f, %f", c.x, c.y, c.z);
-		ImGui::Text("d:%f, %f, %f", d.x, d.y, d.z);
-		ImGui::Text("e:%f, %f, %f", e.x, e.y, e.z);
-		ImGui::Text("matrix:\n%f, %f, %f, %f\n%f, %f, %f, %f\n%f, %f, %f, %f\n%f, %f, %f, %f",
-			rotateMatrix.m[0][0], rotateMatrix.m[0][1], rotateMatrix.m[0][2], rotateMatrix.m[0][3],
-			rotateMatrix.m[1][0], rotateMatrix.m[1][1], rotateMatrix.m[1][2], rotateMatrix.m[1][3],
-			rotateMatrix.m[2][0], rotateMatrix.m[2][1], rotateMatrix.m[2][2], rotateMatrix.m[2][3],
-			rotateMatrix.m[3][0], rotateMatrix.m[3][1], rotateMatrix.m[3][2], rotateMatrix.m[3][3]
-		);
+
 
 		ImGui::End();
 
@@ -766,7 +774,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		//uint32_t color = colliding ? RED : WHITE;
 
 		// 描画
-		
+		DrawSphere({ p, 0.1f }, viewProjectionMatrix, viewportMatrix, 0xFF0000FF);
+		DrawSegment({ pendulum.anchor, Subtract(p, pendulum.anchor) }, viewProjectionMatrix, viewportMatrix, 0xFFFFFFFF);
 		
 		Novice::EndFrame();
 
