@@ -683,6 +683,21 @@ Vector3& operator+=(Vector3& lhs, const Vector3& rhs) {
 	return lhs;
 }
 
+Vector3& operator-=(Vector3& lhs, const Vector3& rhs) {
+	lhs = lhs - rhs;
+	return lhs;
+}
+
+Vector3& operator*=(Vector3& lhs, float s) {
+	lhs = lhs * s;
+	return lhs;
+}
+
+Vector3& operator/=(Vector3& lhs, float s) {
+	lhs = lhs / s;
+	return lhs;
+}
+
 const char kWindowTitle[] = "LE2B_07_カワダ_リクト";
 
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
@@ -692,22 +707,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
 
-	float angularVelocity = 3.14f;
-	float angle = 0.0f;
+	Vector3 a{ 0.2f, 1.0f, 0.0f };
+	Vector3 b{ 2.4f, 3.1f, 1.2f };
+	Vector3 c = a + b;
+	Vector3 d = a - b;
+	Vector3 e = a * 2.4f;
+	Vector3 rotate{ 0.4f, 1.43f,-0.8f };
+	Matrix4x4 rotateXMatrix = MakeRotationXMatrix(rotate.x);
+	Matrix4x4 rotateYMatrix = MakeRotationYMatrix(rotate.y);
+	Matrix4x4 rotateZMatrix = MakeRotationZMatrix(rotate.z);
+	Matrix4x4 rotateMatrix = rotateXMatrix * rotateYMatrix * rotateZMatrix;
 
-	float deltaTime = 1.0f / 60.0f;
-
-	Vector3 center = { 0.0f, 0.0f, 0.0f };
-	float radius = 0.8f;
-
-	
-	Sphere ball{};
-	ball.radius = 0.1f;
-	ball.center = { center.x + radius, center.y, center.z };
-
-	
-	bool isMoving = false;
-	
 
 	Vector3 cameraTranslate{ 0.0f, 1.9f, -6.49f };
 	Vector3 cameraRotate{ 0.26f, 0.0f, 0.0f };
@@ -726,21 +736,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		ImGui::Begin("Window");
 
-		if (ImGui::Button("Start")) {
-			isMoving = true;
-		}
+		ImGui::Text("c:%f, %f, %f", c.x, c.y, c.z);
+		ImGui::Text("d:%f, %f, %f", d.x, d.y, d.z);
+		ImGui::Text("e:%f, %f, %f", e.x, e.y, e.z);
+		ImGui::Text("matrix:\n%f, %f, %f, %f\n%f, %f, %f, %f\n%f, %f, %f, %f\n%f, %f, %f, %f",
+			rotateMatrix.m[0][0], rotateMatrix.m[0][1], rotateMatrix.m[0][2], rotateMatrix.m[0][3],
+			rotateMatrix.m[1][0], rotateMatrix.m[1][1], rotateMatrix.m[1][2], rotateMatrix.m[1][3],
+			rotateMatrix.m[2][0], rotateMatrix.m[2][1], rotateMatrix.m[2][2], rotateMatrix.m[2][3],
+			rotateMatrix.m[3][0], rotateMatrix.m[3][1], rotateMatrix.m[3][2], rotateMatrix.m[3][3]
+		);
 
 		ImGui::End();
 
-
-		if (isMoving) {
-			angle += angularVelocity * deltaTime;
-		}
-
-		
-		ball.center.x = center.x + std::cos(angle) * radius;
-		ball.center.y = center.y + std::sin(angle) * radius;
-		ball.center.z = center.z;
 		
 		// カメラ行列・ビューポート変換等の計算
 		Matrix4x4 cameraMatrix = MakeAffineMatrix({ 1.0f, 1.0f, 1.0f }, cameraRotate, cameraTranslate);
@@ -759,7 +766,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		//uint32_t color = colliding ? RED : WHITE;
 
 		// 描画
-		DrawSphere(ball, viewProjectionMatrix, viewportMatrix, 0xFFFFFFFF);
+		
 		
 		Novice::EndFrame();
 
