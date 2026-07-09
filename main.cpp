@@ -8,6 +8,34 @@ struct Vector3 {
 	float x;
 	float y;
 	float z;
+
+	Vector3& operator+=(const Vector3& v) {
+		x += v.x;
+		y += v.y;
+		z += v.z;
+		return *this;
+	}
+
+	Vector3& operator-=(const Vector3& v) {
+		x -= v.x;
+		y -= v.y;
+		z -= v.z;
+		return *this;
+	}
+
+	Vector3& operator*=(float s) {
+		x *= s;
+		y *= s;
+		z *= s;
+		return *this;
+	}
+
+	Vector3& operator/=(float s) {
+		x /= s;
+		y /= s;
+		z /= s;
+		return *this;
+	}
 };
 
 struct Matrix4x4 {
@@ -677,26 +705,6 @@ Matrix4x4 operator*(const Matrix4x4& m1, const Matrix4x4& m2) {
 	return Multiply(m1, m2);
 }
 
-// Vector3型の+=演算子オーバーロードを追加
-Vector3& operator+=(Vector3& lhs, const Vector3& rhs) {
-	lhs = lhs + rhs;
-	return lhs;
-}
-
-Vector3& operator-=(Vector3& lhs, const Vector3& rhs) {
-	lhs = lhs - rhs;
-	return lhs;
-}
-
-Vector3& operator*=(Vector3& lhs, float s) {
-	lhs = lhs * s;
-	return lhs;
-}
-
-Vector3& operator/=(Vector3& lhs, float s) {
-	lhs = lhs / s;
-	return lhs;
-}
 
 // 単項+演算子
 Vector3 operator+(const Vector3& v) {
